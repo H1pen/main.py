@@ -50,37 +50,45 @@ async def start_cmd(message: types.Message):
 @dp.message()
 async def handle_post(message: types.Message):
     user = message.from_user
-    # Твоя новая приписка
     prefix = "... — пишет:\n\n"
     
     try:
         # 1. Если это ТЕКСТОВОЕ сообщение
         if message.text:
             content = prefix + message.text
-            # В канал (только текст)
+            # В канал
             await bot.send_message(chat_id=CHANNEL_ID, text=content)
-            # В админку (текст + кто прислал)
+            # В админку
             await bot.send_message(
                 chat_id=ADMIN_GROUP_ID, 
                 text=f"{content}\n\n👤 Автор: {user.full_name} (@{user.username or 'скрыто'})"
             )
         
-        # 2. Если это ФОТО или ВИДЕО
-        else:
+        # 2. Если это ФОТО
+        elif message.photo:
             caption = prefix + (message.caption or "")
-            # В канал
-            await message.copy_to(chat_id=CHANNEL_ID, caption=caption)
-            # В админку
-            await message.copy_to(
-                chat_id=ADMIN_GROUP_ID, 
-                caption=f"{caption}\n\n👤 Автор: {user.full_name} (@{user.username or 'скрыто'})"
-            )
+            # Берем последнее фото (самое лучшее качество)
+            photo_id = message.photo[-1].file_id
+            await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption)
+            await bot.send_photo(chat_id=ADMIN_GROUP_ID, photo=photo_id, 
+                                 caption=f"{caption}\n\n👤 Автор: {user.full_name}")
+
+        # 3. Если это ВИДЕО
+        elif message.video:
+            caption = prefix + (message.caption or "")
+            await bot.send_video(chat_id=CHANNEL_ID, video=message.video.file_id, caption=caption)
+            await bot.send_video(chat_id=ADMIN_GROUP_ID, video=message.video.file_id, 
+                                 caption=f"{caption}\n\n👤 Автор: {user.full_name}")
         
+        else:
+            return await message.answer("❌ Тип файла не поддерживается (шли текст, фото или видео).")
+
         await message.answer("✅ Отправлено в канал!")
         
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.answer(f"❌ Ошибка отправки. Проверь, админ ли бот в канале.")
+        await message.answer("❌ Произошла ошибка. Убедись, что бот — администратор канала.")
+
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
