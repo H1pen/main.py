@@ -10,6 +10,7 @@ TOKEN = "8668356633:AAE29U5g3PcT8r8eYOM_zhmXWtRa_QVQvQo"
 ADMIN_GROUP_ID = -1003670917930 
 CHANNEL_ID = "@WeSchoolPodslyshano" 
 
+
 # --- Middleware для задержки 30 секунд (без банов) ---
 class SlowModeMiddleware(BaseMiddleware):
     def __init__(self):
@@ -51,44 +52,33 @@ async def start_cmd(message: types.Message):
 async def handle_post(message: types.Message):
     user = message.from_user
     prefix = "... — пишет:\n\n"
-    
-    try:
-        # 1. Если это ТЕКСТОВОЕ сообщение
-        if message.text:
-            content = prefix + message.text
-            # В канал
-            await bot.send_message(chat_id=CHANNEL_ID, text=content)
-            # В админку
-            await bot.send_message(
-                chat_id=ADMIN_GROUP_ID, 
-                text=f"{content}\n\n👤 Автор: {user.full_name} (@{user.username or 'скрыто'})"
-            )
-        
-        # 2. Если это ФОТО
-        elif message.photo:
-            caption = prefix + (message.caption or "")
-            # Берем последнее фото (самое лучшее качество)
-            photo_id = message.photo[-1].file_id
-            await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption)
-            await bot.send_photo(chat_id=ADMIN_GROUP_ID, photo=photo_id, 
-                                 caption=f"{caption}\n\n👤 Автор: {user.full_name}")
+    caption = prefix + (message.caption or "")
+    text_content = prefix + (message.text or "")
 
-        # 3. Если это ВИДЕО
-        elif message.video:
-            caption = prefix + (message.caption or "")
-            await bot.send_video(chat_id=CHANNEL_ID, video=message.video.file_id, caption=caption)
-            await bot.send_video(chat_id=ADMIN_GROUP_ID, video=message.video.file_id, 
-                                 caption=f"{caption}\n\n👤 Автор: {user.full_name}")
-        
-        else:
-            return await message.answer("❌ Тип файла не поддерживается (шли текст, фото или видео).")
+    # Список ID для рассылки (канал и админка)
+    targets = [
+        {"id": CHANNEL_ID, "label": "Канал"},
+        {"id": ADMIN_GROUP_ID, "label": "Админка"}
+    ]
 
-        await message.answer("✅ Отправлено в канал!")
+    for target in targets:
+        try:
+            if message.text:
+                await bot.send_message(chat_id=target['id'], text=text_content)
+            elif message.photo:
+                await bot.send_photo(chat_id=target['id'], photo=message.photo[-1].file_id, caption=caption)
+            elif message.video:
+                await bot.send_video(chat_id=target['id'], video=message.video.file_id, caption=caption)
+        except Exception as e:
+            logging.error(f"Ошибка отправки в {target['label']}: {e}")
+            await message.answer(f"❌ Ошибка в {target['label']}: {e}")
+
+    await message.answer("✅ Обработка завершена!")
+
         
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.answer("❌ Произошла ошибка. Убедись, что бот — администратор канала.")
-
+        await message.answer(f"❌ Ошибка отправки. Проверь, админ ли бот в канале.")
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
