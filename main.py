@@ -91,16 +91,24 @@ async def handle_user_post(message: types.Message):
     username = f"@{user.username}" if user.username else f"id{user.id}"
     
     try:
-        # 1. В КАНАЛ (только копия сообщения, без данных автора)
+        # 1. В КАНАЛ (только копия контента)
+        # Если здесь ошибка, бот напишет её ниже
         await message.send_copy(chat_id=CHANNEL_ID)
         
-        # 2. В АДМИН-ГРУППУ (копия сообщения + текст с автором)
+        # 2. В АДМИН-ГРУППУ
         await message.send_copy(chat_id=ADMIN_GROUP_ID)
         await bot.send_message(
             chat_id=ADMIN_GROUP_ID,
             text=f"👤 Автор: {user.full_name} ({username})"
         )
         
+        await message.answer("✅ Принято!")
+        
+    except Exception as e:
+        logging.error(f"Ошибка: {e}")
+        # Бот ответит вам, какая именно ошибка произошла
+        await message.answer(f"❌ Ошибка при отправке в канал: {e}\nУбедись, что бот админ в канале {CHANNEL_ID}")
+
         await message.answer("✅ Сообщение отправлено в канал!")
         
     except Exception as e:
