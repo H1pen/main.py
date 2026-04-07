@@ -7,7 +7,7 @@ from aiogram.filters import Command
 
 # --- НАСТРОЙКИ ---
 TOKEN = "8668356633:AAE29U5g3PcT8r8eYOM_zhmXWtRa_QVQvQo"
-ADMIN_GROUP_ID = -1008668356633
+ADMIN_GROUP_ID = -1003670917930
 CHANNEL_ID = -1003742221408 
 
 # Middleware для ограничения отправки (раз в 60 секунд)
