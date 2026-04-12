@@ -18,7 +18,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
 # --- НАСТРОЙКИ БОТА ---
-TOKEN = "8668356633:AAE29U5g3PcT8r8eYOM_zhmXWtRa_QVQvQo"
+TOKEN = "8668356633:AAHWwI4AKB1zygevOaoIuEWrodIUZiSw60U"
 ADMIN_GROUP_ID = -1003670917930
 CHANNEL_ID = -1003742221408 
 
