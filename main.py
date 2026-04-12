@@ -50,7 +50,7 @@ async def start_cmd(message: types.Message):
 @dp.message()
 async def handle_post(message: types.Message):
     user = message.from_user
-    prefix = "📢 **Предложка:**\n\n"
+    prefix = "... пищет-\n\n"
     user_info = f"\n\n👤 Отправил: {user.full_name} (@{user.username or 'скрыто'})"
     
     try:
