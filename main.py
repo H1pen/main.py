@@ -1,43 +1,43 @@
 import asyncio
 import logging
 import time
+import threading
+from flask import Flask
 from typing import Any, Awaitable, Callable, Dict
 from aiogram import Bot, Dispatcher, types, BaseMiddleware
 from aiogram.filters import Command
 
-# --- НАСТРОЙКИ ---
+# --- ВСТРОЕННЫЙ СЕРВЕР ДЛЯ UPTIMEROBOT ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот работает!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+# --- НАСТРОЙКИ БОТА ---
 TOKEN = "8668356633:AAE29U5g3PcT8r8eYOM_zhmXWtRa_QVQvQo"
 ADMIN_GROUP_ID = -1003670917930
 CHANNEL_ID = -1003742221408 
 
-# Middleware для ограничения отправки (раз в 60 секунд)
+# Middleware для КД (1 сообщение в минуту)
 class SlowModeMiddleware(BaseMiddleware):
     def __init__(self):
         self.last_msg_times = {}
 
-    async def __call__(
-        self,
-        handler: Callable[[types.TelegramObject, Dict[str, Any]], Awaitable[Any]],
-        event: types.Message,
-        data: Dict[str, Any]
-    ) -> Any:
+    async def __call__(self, handler, event: types.Message, data):
         if not event.from_user:
             return await handler(event, data)
-
         user_id = event.from_user.id
         now = time.time()
-        limit = 60 # 1 минута
-        
-        if user_id in self.last_msg_times:
-            time_passed = now - self.last_msg_times[user_id]
-            if time_passed < limit:
-                left = int(limit - time_passed)
-                return await event.answer(f"⏳ КД! Подожди {left} сек. перед следующей новостью.")
-
+        if user_id in self.last_msg_times and now - self.last_msg_times[user_id] < 60:
+            left = int(60 - (now - self.last_msg_times[user_id]))
+            return await event.answer(f"⏳ КД! Подожди {left} сек.")
         self.last_msg_times[user_id] = now
         return await handler(event, data)
 
-# Инициализация
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 dp.message.middleware(SlowModeMiddleware())
@@ -45,56 +45,42 @@ logging.basicConfig(level=logging.INFO)
 
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
-    await message.answer("👋 Привет! Присылай текст, фото или видео для публикации в канале.\n\n⚠️ Лимит: 1 сообщение в минуту.")
+    await message.answer("👋 Привет! Присылай текст, фото или видео для публикации.")
 
 @dp.message()
 async def handle_post(message: types.Message):
     user = message.from_user
-    prefix = "... — пишет:\n\n"
+    prefix = "📢 **Предложка:**\n\n"
     user_info = f"\n\n👤 Отправил: {user.full_name} (@{user.username or 'скрыто'})"
     
     try:
-        # ОБРАБОТКА ТЕКСТА
         if message.text:
-            content = prefix + message.text
-            # В канал (только текст)
-            await bot.send_message(chat_id=CHANNEL_ID, text=content)
-            # В админку (текст + автор)
-            await bot.send_message(chat_id=ADMIN_GROUP_ID, text=content + user_info)
-        
-        # ОБРАБОТКА ФОТО
+            await bot.send_message(CHANNEL_ID, prefix + message.text)
+            await bot.send_message(ADMIN_GROUP_ID, prefix + message.text + user_info)
         elif message.photo:
-            caption = prefix + (message.caption or "")
             photo_id = message.photo[-1].file_id
-            # В канал
-            await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption)
-            # В админку
-            await bot.send_photo(chat_id=ADMIN_GROUP_ID, photo=photo_id, caption=caption + user_info)
-            
-        # ОБРАБОТКА ВИДЕО
+            cap = prefix + (message.caption or "")
+            await bot.send_photo(CHANNEL_ID, photo=photo_id, caption=cap)
+            await bot.send_photo(ADMIN_GROUP_ID, photo=photo_id, caption=cap + user_info)
         elif message.video:
-            caption = prefix + (message.caption or "")
             video_id = message.video.file_id
-            # В канал
-            await bot.send_video(chat_id=CHANNEL_ID, video=video_id, caption=caption)
-            # В админку
-            await bot.send_video(chat_id=ADMIN_GROUP_ID, video=video_id, caption=caption + user_info)
-        
+            cap = prefix + (message.caption or "")
+            await bot.send_video(CHANNEL_ID, video=video_id, caption=cap)
+            await bot.send_video(ADMIN_GROUP_ID, video=video_id, caption=cap + user_info)
         else:
-            return await message.answer("❌ Бот принимает только текст, фото или видео.")
+            return await message.answer("❌ Только текст, фото или видео!")
 
-        await message.answer("✅ Принято! Твоя новость отправлена в канал.")
-        
+        await message.answer("✅ Отправлено в канал!")
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.answer(f"❌ Ошибка отправки. Убедись, что бот — администратор в канале и группе.")
+        await message.answer("❌ Ошибка. Проверь, что бот — админ в канале.")
 
 async def main():
+    # Запускаем Flask в отдельном потоке
+    threading.Thread(target=run_flask, daemon=True).start()
+    # Запускаем бота
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("Бот остановлен")
+    asyncio.run(main())
