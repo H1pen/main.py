@@ -3,7 +3,6 @@ import logging
 import time
 import threading
 from flask import Flask
-from typing import Any, Awaitable, Callable, Dict
 from aiogram import Bot, Dispatcher, types, BaseMiddleware
 from aiogram.filters import Command
 
@@ -21,6 +20,9 @@ def run_flask():
 TOKEN = "8668356633:AAHWwI4AKB1zygevOaoIuEWrodIUZiSw60U"
 ADMIN_GROUP_ID = -1003670917930
 CHANNEL_ID = -1003742221408 
+
+# Подпись для канала
+FOOTER = "\n\nчатбот куда можно кидай свои предложение для будликации с его юзом @PodslushanoMYschoolBot"
 
 # Middleware для КД (1 сообщение в минуту)
 class SlowModeMiddleware(BaseMiddleware):
@@ -50,35 +52,40 @@ async def start_cmd(message: types.Message):
 @dp.message()
 async def handle_post(message: types.Message):
     user = message.from_user
-    prefix = "... пищет-\n\n"
+    # Как просили: префикс как в вашем коде
+    prefix = "... пишет-\n\n"
+    # Данные для админ-чата
     user_info = f"\n\n👤 Отправил: {user.full_name} (@{user.username or 'скрыто'})"
     
     try:
         if message.text:
-            await bot.send_message(CHANNEL_ID, prefix + message.text)
-            await bot.send_message(ADMIN_GROUP_ID, prefix + message.text + user_info)
+            content = f"{prefix}\"{message.text}\"{FOOTER}"
+            await bot.send_message(CHANNEL_ID, content)
+            await bot.send_message(ADMIN_GROUP_ID, content + user_info)
+        
         elif message.photo:
             photo_id = message.photo[-1].file_id
-            cap = prefix + (message.caption or "")
+            cap = f"{prefix}\"{message.caption or ''}\"{FOOTER}"
             await bot.send_photo(CHANNEL_ID, photo=photo_id, caption=cap)
             await bot.send_photo(ADMIN_GROUP_ID, photo=photo_id, caption=cap + user_info)
+            
         elif message.video:
             video_id = message.video.file_id
-            cap = prefix + (message.caption or "")
+            cap = f"{prefix}\"{message.caption or ''}\"{FOOTER}"
             await bot.send_video(CHANNEL_ID, video=video_id, caption=cap)
             await bot.send_video(ADMIN_GROUP_ID, video=video_id, caption=cap + user_info)
+        
         else:
             return await message.answer("❌ Только текст, фото или видео!")
 
         await message.answer("✅ Отправлено в канал!")
+        
     except Exception as e:
         logging.error(f"Ошибка: {e}")
         await message.answer("❌ Ошибка. Проверь, что бот — админ в канале.")
 
 async def main():
-    # Запускаем Flask в отдельном потоке
     threading.Thread(target=run_flask, daemon=True).start()
-    # Запускаем бота
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
