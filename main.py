@@ -6,7 +6,7 @@ from flask import Flask
 from aiogram import Bot, Dispatcher, types, BaseMiddleware
 from aiogram.filters import Command
 
-# --- ВСТРОЕННЫЙ СЕРВЕР ДЛЯ UPTIMEROBOT ---
+# --- ВСТРОЕННЫЙ СЕРВЕР ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -16,7 +16,7 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
-# --- НАСТРОЙКИ БОТА ---
+# --- НАСТРОЙКИ ---
 TOKEN = "8668356633:AAHWwI4AKB1zygevOaoIuEWrodIUZiSw60U"
 ADMIN_GROUP_ID = -1003670917930
 CHANNEL_ID = -1003742221408 
@@ -24,7 +24,6 @@ CHANNEL_ID = -1003742221408
 # Подпись для канала
 FOOTER = "\n\nчатбот куда можно кидай свои предложение для будликации с его юзом @PodslushanoMYschoolBot"
 
-# Middleware для КД (1 сообщение в минуту)
 class SlowModeMiddleware(BaseMiddleware):
     def __init__(self):
         self.last_msg_times = {}
@@ -52,26 +51,24 @@ async def start_cmd(message: types.Message):
 @dp.message()
 async def handle_post(message: types.Message):
     user = message.from_user
-    # Как просили: префикс как в вашем коде
     prefix = "... пишет-\n\n"
-    # Данные для админ-чата
     user_info = f"\n\n👤 Отправил: {user.full_name} (@{user.username or 'скрыто'})"
     
     try:
         if message.text:
-            content = f"{prefix}\"{message.text}\"{FOOTER}"
-            await bot.send_message(CHANNEL_ID, content)
-            await bot.send_message(ADMIN_GROUP_ID, content + user_info)
+            msg_text = f"{prefix}{message.text}{FOOTER}"
+            await bot.send_message(CHANNEL_ID, msg_text)
+            await bot.send_message(ADMIN_GROUP_ID, msg_text + user_info)
         
         elif message.photo:
             photo_id = message.photo[-1].file_id
-            cap = f"{prefix}\"{message.caption or ''}\"{FOOTER}"
+            cap = f"{prefix}{message.caption or ''}{FOOTER}"
             await bot.send_photo(CHANNEL_ID, photo=photo_id, caption=cap)
             await bot.send_photo(ADMIN_GROUP_ID, photo=photo_id, caption=cap + user_info)
             
         elif message.video:
             video_id = message.video.file_id
-            cap = f"{prefix}\"{message.caption or ''}\"{FOOTER}"
+            cap = f"{prefix}{message.caption or ''}{FOOTER}"
             await bot.send_video(CHANNEL_ID, video=video_id, caption=cap)
             await bot.send_video(ADMIN_GROUP_ID, video=video_id, caption=cap + user_info)
         
@@ -79,10 +76,9 @@ async def handle_post(message: types.Message):
             return await message.answer("❌ Только текст, фото или видео!")
 
         await message.answer("✅ Отправлено в канал!")
-        
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.answer("❌ Ошибка. Проверь, что бот — админ в канале.")
+        await message.answer("❌ Ошибка при отправке.")
 
 async def main():
     threading.Thread(target=run_flask, daemon=True).start()
