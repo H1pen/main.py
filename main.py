@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command, CommandObject
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-# --- СЕРВЕР ДЛЯ ПОДДЕРЖКИ РАБОТЫ (RENDER / REPLIT) ---
+# --- СЕРВЕР ДЛЯ ПОДДЕРЖКИ РАБОТЫ ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -22,8 +22,6 @@ def run_flask():
 TOKEN = "8668356633:AAHWwI4AKB1zygevOaoIuEWrodIUZiSw60U"
 CHANNEL_ID = -1003742221408
 ADMIN_GROUP_ID = -5551460697
-
-# Группы, где работает удаление через ответ (reply)
 MANAGED_GROUPS = [-1003670917930, -5551460697]
 
 # Главный администратор с полным доступом
@@ -35,7 +33,6 @@ logging.basicConfig(level=logging.INFO)
 
 waiting_for_channel_post = set()
 
-# Кнопка удаления для личных сообщений админа после публикации
 def get_admin_delete_kb(channel_msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -66,86 +63,16 @@ class SlowModeMiddleware(BaseMiddleware):
 
 dp.message.middleware(SlowModeMiddleware())
 
-# --- УДАЛЕНИЕ ПОСТА ПО НАЖАТИЮ КНОПКИ В ЛС ---
-@dp.callback_query(F.data.startswith("del_msg:"))
-async def delete_channel_post_callback(call: CallbackQuery):
-    sender = (call.from_user.username or "").lower()
-    if sender != SUPER_ADMIN.lower():
-        return await call.answer("⛔ Доступ разрешен только администратору.", show_alert=True)
+# =====================================================================
+# 1. КОМАНДЫ (ОБРАБАТЫВАЮТСЯ СТРОГО ПЕРВЫМИ)
+# =====================================================================
 
-    msg_id = int(call.data.split(":")[1])
-    try:
-        await bot.delete_message(chat_id=CHANNEL_ID, message_id=msg_id)
-        await call.message.edit_text("🗑 Пост полностью удален из канала.")
-        await call.answer()
-    except Exception as e:
-        await call.answer(f"❌ Ошибка удаления: {e}", show_alert=True)
+@dp.message(F.chat.type == "private", Command("start"))
+async def start_cmd(m: types.Message):
+    await m.answer("Присылай пост!")
 
-# --- УДАЛЕНИЕ СООБЩЕНИЙ ПО ССЫЛКЕ ИЛИ ID (В ЛС) ---
-@dp.message(F.chat.type == "private", Command("del"))
-async def delete_any_message(m: types.Message, command: CommandObject):
-    sender = (m.from_user.username or "").lower()
-    if sender != SUPER_ADMIN.lower():
-        return await m.answer("⛔ Доступ разрешен только администратору.")
-
-    if not command.args:
-        return await m.answer(
-            "Укажите номер сообщения или ссылку на него.\n\n"
-            "Примеры:\n"
-            "• `/del 45` (удалит сообщение №45 из канала)\n"
-            "• `/del https://t.me/podslushanoMskool/45`\n"
-            "• `/del https://t.me/c/3742221408/45`",
-            parse_mode="Markdown"
-        )
-
-    arg = command.args.strip()
-    target_chat = CHANNEL_ID
-    msg_id = None
-
-    match_private_link = re.search(r"t\.me/c/(\d+)/(\d+)$", arg)
-    match_public_link = re.search(r"/(\d+)$", arg)
-
-    if match_private_link:
-        target_chat = int(f"-100{match_private_link.group(1)}")
-        msg_id = int(match_private_link.group(2))
-    elif match_public_link:
-        msg_id = int(match_public_link.group(1))
-    elif arg.isdigit():
-        msg_id = int(arg)
-    else:
-        return await m.answer("❌ Не удалось распознать ID сообщения. Проверьте ссылку.")
-
-    try:
-        await bot.delete_message(chat_id=target_chat, message_id=msg_id)
-        await m.answer(f"🗑 Сообщение #{msg_id} успешно удалено!")
-    except Exception as e:
-        error_text = str(e).lower()
-        if "message to delete not found" in error_text:
-            await m.answer("❌ Сообщение не найдено (возможно, оно уже удалено).")
-        elif "not enough rights" in error_text:
-            await m.answer("❌ У бота нет прав на удаление сообщений в этом чате.")
-        else:
-            await m.answer(f"❌ Ошибка Telegram: {e}")
-
-# --- БЫСТРОЕ УДАЛЕНИЕ В ГРУППАХ ЧЕРЕЗ REPLY ---
-@dp.message(F.chat.id.in_(MANAGED_GROUPS), Command("del"))
-async def delete_in_group_by_reply(m: types.Message):
-    sender = (m.from_user.username or "").lower()
-    if sender != SUPER_ADMIN.lower():
-        return
-
-    if not m.reply_to_message:
-        return await m.reply("Ответьте этой командой на сообщение, которое нужно удалить.")
-
-    try:
-        await bot.delete_message(chat_id=m.chat.id, message_id=m.reply_to_message.message_id)
-        await m.delete()
-    except Exception as e:
-        await m.reply(f"❌ Не удалось удалить: {e}")
-
-# --- АНОНИМНАЯ ПУБЛИКАЦИЯ В КАНАЛ ДЛЯ @jisW69 ---
 @dp.message(F.chat.type == "private", Command("cancel"))
-async def cancel_post(m: types.Message):
+async def cancel_cmd(m: types.Message):
     if m.from_user.id in waiting_for_channel_post:
         waiting_for_channel_post.discard(m.from_user.id)
         await m.answer("❌ Публикация отменена.")
@@ -153,10 +80,10 @@ async def cancel_post(m: types.Message):
         await m.answer("Нет активного режима публикации.")
 
 @dp.message(F.chat.type == "private", Command("post"))
-async def post_command(m: types.Message, command: CommandObject):
+async def post_cmd(m: types.Message, command: CommandObject):
     sender = (m.from_user.username or "").lower()
     if sender != SUPER_ADMIN.lower():
-        return await m.answer("⛔ Доступ разрешен только администратору.")
+        return await m.answer(f"⛔ Доступ запрещен. Бот видит вас как @{m.from_user.username or 'без юзернейма'}.")
 
     if command.args:
         try:
@@ -171,19 +98,90 @@ async def post_command(m: types.Message, command: CommandObject):
     waiting_for_channel_post.add(m.from_user.id)
     await m.answer(
         "📢 <b>Режим анонимной публикации:</b>\n\n"
-        "Отправьте текст, фото, видео или опрос — бот скопирует его в канал от лица канала без меток автора.\n\n"
+        "Отправьте текст, фото или видео — бот опубликует его в канале.\n"
         "Для отмены отправьте /cancel.",
         parse_mode="HTML"
     )
 
-# --- ПРЕДЛОЖКА И ОБРАБОТЧИК ЛС ---
-@dp.message(F.chat.type == "private", Command("start"))
-async def start(m: types.Message):
-    await m.answer("Присылай пост!")
+# --- УДАЛЕНИЕ ПО КНОПКЕ В ЛС ---
+@dp.callback_query(F.data.startswith("del_msg:"))
+async def delete_channel_post_callback(call: CallbackQuery):
+    sender = (call.from_user.username or "").lower()
+    if sender != SUPER_ADMIN.lower():
+        return await call.answer("⛔ Доступ разрешен только @jisW69.", show_alert=True)
+
+    msg_id = int(call.data.split(":")[1])
+    try:
+        await bot.delete_message(chat_id=CHANNEL_ID, message_id=msg_id)
+        await call.message.edit_text("🗑 Пост полностью удален из канала.")
+        await call.answer()
+    except Exception as e:
+        await call.answer(f"❌ Ошибка удаления: {e}", show_alert=True)
+
+# --- УДАЛЕНИЕ В ЛС ПО ССЫЛКЕ ИЛИ НОМЕРУ (/del) ---
+@dp.message(F.chat.type == "private", Command("del"))
+async def delete_cmd(m: types.Message, command: CommandObject):
+    sender = (m.from_user.username or "").lower()
+    if sender != SUPER_ADMIN.lower():
+        return await m.answer(f"⛔ Доступ запрещен. Ваш юзернейм: @{m.from_user.username or 'скрыт'}, требуется: @{SUPER_ADMIN}")
+
+    if not command.args:
+        return await m.answer(
+            "Укажите номер сообщения или ссылку на него.\n"
+            "Пример: `/del 45` или `/del https://t.me/podslushanoMskool/45`",
+            parse_mode="Markdown"
+        )
+
+    arg = command.args.strip()
+    target_chat = CHANNEL_ID
+    msg_id = None
+
+    match_private = re.search(r"t\.me/c/(\d+)/(\d+)$", arg)
+    match_public = re.search(r"/(\d+)$", arg)
+
+    if match_private:
+        target_chat = int(f"-100{match_private.group(1)}")
+        msg_id = int(match_private.group(2))
+    elif match_public:
+        msg_id = int(match_public.group(1))
+    elif arg.isdigit():
+        msg_id = int(arg)
+    else:
+        return await m.answer("❌ Не удалось распознать ID сообщения.")
+
+    try:
+        await bot.delete_message(chat_id=target_chat, message_id=msg_id)
+        await m.answer(f"🗑 Сообщение #{msg_id} успешно удалено!")
+    except Exception as e:
+        await m.answer(f"❌ Ошибка при удалении: {e}")
+
+# --- УДАЛЕНИЕ В ГРУППАХ ЧЕРЕЗ REPLY ---
+@dp.message(F.chat.id.in_(MANAGED_GROUPS), Command("del"))
+async def delete_in_group_by_reply(m: types.Message):
+    sender = (m.from_user.username or "").lower()
+    if sender != SUPER_ADMIN.lower():
+        return
+
+    if not m.reply_to_message:
+        return await m.reply("Ответьте командой /del на сообщение, которое нужно удалить.")
+
+    try:
+        await bot.delete_message(chat_id=m.chat.id, message_id=m.reply_to_message.message_id)
+        await m.delete()
+    except Exception as e:
+        await m.reply(f"❌ Ошибка удаления: {e}")
+
+# =====================================================================
+# 2. ОБРАБОТЧИК ПРЕДЛОЖКИ (СТРОГО НИЖЕ ВСЕХ КОМАНД)
+# =====================================================================
 
 @dp.message(F.chat.type == "private")
-async def handle_private(m: types.Message):
-    # Анонимный пост от @jisW69
+async def handle_private_messages(m: types.Message):
+    # Если текст начинается со слеша — это неизвестная команда, не постим ее в канал
+    if m.text and m.text.startswith("/"):
+        return await m.answer("❓ Неизвестная команда.")
+
+    # Прямой пост от @jisW69
     if m.from_user.id in waiting_for_channel_post:
         waiting_for_channel_post.discard(m.from_user.id)
         try:
@@ -197,7 +195,6 @@ async def handle_private(m: types.Message):
                 reply_markup=get_admin_delete_kb(sent.message_id)
             )
         except Exception as e:
-            logging.error(f"Ошибка публикации: {e}")
             return await m.answer(f"❌ Ошибка публикации: {e}")
 
     # Обычная предложка подписчиков
